@@ -1,5 +1,4 @@
 import { v2 as cloudinary } from 'cloudinary';
-import sharp from 'sharp';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -10,33 +9,28 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_SECRET,
 });
 
-// Compress image with sharp before uploading — reduces payload by ~70-90%
-async function compressImage(buffer) {
-  try {
-    const meta = await sharp(buffer).metadata();
-    // Skip compression for already-small files (< 300KB)
-    if (buffer.length < 300 * 1024) return buffer;
-    return await sharp(buffer)
-      .rotate() // auto-orient EXIF
-      .resize({ width: 2000, height: 2000, fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 82, progressive: true })
-      .toBuffer();
-  } catch {
-    return buffer; // fallback: send original if sharp fails
-  }
-}
-
 export const uploadToCloudinary = async (fileBuffer, folder = 'sjcu') => {
-  const compressed = await compressImage(fileBuffer);
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: 'image', transformation: [{ quality: 'auto', fetch_format: 'auto' }] },
+      {
+        folder,
+        resource_type: 'image',
+        // Cloudinary resizes & compresses server-side — no sharp needed
+        transformation: [
+          { width: 2000, height: 2000, crop: 'limit' },
+          { quality: 'auto', fetch_format: 'auto' },
+        ],
+        eager: [
+          { width: 2000, height: 2000, crop: 'limit', quality: 'auto', fetch_format: 'auto' },
+        ],
+        eager_async: false,
+      },
       (error, result) => {
         if (error) return reject(error);
         resolve(result);
       }
     );
-    uploadStream.end(compressed);
+    uploadStream.end(fileBuffer);
   });
 };
 
