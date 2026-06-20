@@ -33,10 +33,3 @@ export const adminOnly = (req, res, next) => {
   }
   return sendError(res, 'Access denied - Admin only', 403);
 };
-
-export const superAdminOnly = (req, res, next) => {
-  if (req.user?.role === 'super_admin') {
-    return next();
-  }
-  return sendError(res, 'Access denied - Super Admin only', 403);
-};

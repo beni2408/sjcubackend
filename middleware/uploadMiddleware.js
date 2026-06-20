@@ -20,11 +20,11 @@ const videoFilter = (req, file, cb) => {
   cb(new Error('Only video files are allowed (MP4, MOV, AVI, WebM, MKV, 3GP, etc.)'));
 };
 
-// Multiple images — up to 20 files, 10 MB each
+// Multiple images — up to 20 files, 15 MB each (sharp compresses before Cloudinary upload)
 export const uploadMultiple = multer({
   storage,
   fileFilter: imageFilter,
-  limits: { fileSize: 100 * 1024 * 1024 },
+  limits: { fileSize: 15 * 1024 * 1024 },
 }).array('images', 20);
 
 // Single video — 500 MB limit

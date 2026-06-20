@@ -1,14 +1,10 @@
 import mongoose from 'mongoose';
 
-const apiKeysSchema = new mongoose.Schema({
-    cloudinaryCloudName: { type: String, default: '' },
-    cloudinaryApiKey:    { type: String, default: '' },
-    cloudinaryApiSecret: { type: String, default: '' },
-    emailUser:           { type: String, default: '' },
-    emailPassword:       { type: String, default: '' },
-    youtubeApiKey:       { type: String, default: '' },
-    groqApiKey:          { type: String, default: '' },
-    updatedBy:           { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+const apiKeySchema = new mongoose.Schema({
+  key:        { type: String, required: true, unique: true, trim: true },
+  ciphertext: { type: String, required: true },
+  iv:         { type: String, required: true },
+  tag:        { type: String, required: true },
 }, { timestamps: true });
 
-export default mongoose.model('ApiKeys', apiKeysSchema);
+export default mongoose.model('ApiKey', apiKeySchema);

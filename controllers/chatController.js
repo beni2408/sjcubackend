@@ -1,125 +1,88 @@
 import Groq from 'groq-sdk';
+import { getDecryptedKey } from './apiKeysController.js';
+import Member from '../models/Member.js';
 import Production from '../models/Production.js';
 import Event from '../models/Event.js';
-import Member from '../models/Member.js';
 import Audition from '../models/Audition.js';
-import Settings from '../models/Settings.js';
 import UpcomingProject from '../models/UpcomingProject.js';
+import { sendSuccess, sendError } from '../utils/apiResponse.js';
 
-const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
+async function getGroq() {
+  const key = process.env.GROQ_API_KEY || await getDecryptedKey('groqApiKey');
+  if (!key) return null;
+  return new Groq({ apiKey: key });
+}
 
 async function buildContext() {
-    const [productions, events, members, auditions, settings, upcoming] = await Promise.all([
-        Production.find({ hidden: { $ne: true } }).select('title category youtubeLink description').lean(),
-        Event.find({}).select('title date venue time description').sort({ date: 1 }).lean(),
-        Member.find({}).select('name position teamCategory description').sort({ order: 1 }).lean(),
-        Audition.find({ status: 'active' }).select('title description requirements applicationDeadline').lean(),
-        Settings.findOne().lean(),
-        UpcomingProject.find({}).select('title description expectedDate status').lean(),
-    ]);
+  const [members, productions, events, auditions, upcoming] = await Promise.all([
+    Member.find().select('name role bio slug').limit(20).lean(),
+    Production.find().sort({ createdAt: -1 }).select('title description year').limit(10).lean(),
+    Event.find({ date: { $gte: new Date() } }).sort({ date: 1 }).select('title date venue time description').limit(5).lean(),
+    Audition.find().sort({ date: 1 }).select('title date venue applicationEnd minAge maxAge description auditionId').limit(5).lean(),
+    UpcomingProject.find().sort({ createdAt: -1 }).select('title description').limit(5).lean(),
+  ]);
 
-    const now = new Date();
-    const upcomingEvents = events.filter(e => new Date(e.date) >= now);
-    const pastEvents = events.filter(e => new Date(e.date) < now);
+  const now = new Date();
 
-    return `
-## About St. John's Carol Union (SJCU)
-St. John's Carol Union (SJCU) is a vibrant Christian choir and music ministry based in Madathuvilai, Arumuganeri, Tamil Nadu, India. Established in 2018, SJCU is dedicated to glorifying God through song. They perform carol services, worship events, and special music productions.
-${settings?.aboutText ? `\nAbout (from website): ${settings.aboutText}` : ''}
-Contact Email: ${settings?.email || 'johnscarol2018@gmail.com'}
-Phone: ${settings?.phone || 'Contact via website'}
-Address: ${settings?.address || 'Madathuvilai, Arumuganeri, Tamil Nadu, India'}
+  const memberText = members.map(m => `- ${m.name} (${m.role})${m.bio ? ': ' + m.bio.slice(0, 120) : ''}`).join('\n');
+  const productionText = productions.map(p => `- ${p.title}${p.year ? ' (' + p.year + ')' : ''}${p.description ? ': ' + p.description.slice(0, 100) : ''}`).join('\n');
+  const eventText = events.map(e => `- ${e.title} on ${new Date(e.date).toDateString()}${e.venue ? ' at ' + e.venue : ''}${e.time ? ' at ' + e.time : ''}`).join('\n') || 'No upcoming events listed.';
+  const auditionText = auditions.map(a => {
+    const open = new Date(a.applicationEnd) > now;
+    return `- ${a.title} (${a.auditionId}) — ${new Date(a.date).toDateString()} at ${a.venue}, Age ${a.minAge}-${a.maxAge}, Applications ${open ? 'OPEN until ' + new Date(a.applicationEnd).toDateString() : 'CLOSED'}`;
+  }).join('\n') || 'No auditions listed.';
+  const upcomingText = upcoming.map(u => `- ${u.title}${u.description ? ': ' + u.description.slice(0, 100) : ''}`).join('\n') || 'None listed.';
 
-## Music Productions (${productions.length} total)
-${productions.length === 0 ? 'No productions listed currently.' : productions.map(p =>
-    `- **${p.title}** [${p.category}]${p.description ? ': ' + p.description.slice(0, 120) : ''}${p.youtubeLink ? ' (available on YouTube)' : ''}`
-).join('\n')}
+  return `You are the official AI assistant for St. John's Carol Union (SJCU), a Christian choir and musical ministry.
+Be friendly, helpful, and concise. Keep replies under 3 short paragraphs unless asked for details.
+Use the live data below to answer questions accurately. If something isn't in the data, say you don't have that info right now.
 
-## Upcoming Events (${upcomingEvents.length})
-${upcomingEvents.length === 0 ? 'No upcoming events at this time. Check back soon!' : upcomingEvents.map(e =>
-    `- **${e.title}** — ${new Date(e.date).toDateString()}${e.venue ? ' at ' + e.venue : ''}${e.time ? ', ' + e.time : ''}${e.description ? '. ' + e.description.slice(0, 100) : ''}`
-).join('\n')}
+Today's date: ${now.toDateString()}
 
-## Past Events (recent ${Math.min(pastEvents.length, 5)})
-${pastEvents.slice(-5).map(e =>
-    `- **${e.title}** — ${new Date(e.date).toDateString()}${e.venue ? ' at ' + e.venue : ''}`
-).join('\n') || 'None recorded.'}
+CHOIR MEMBERS:
+${memberText || 'Not available.'}
 
-## Team Members (${members.length} total)
-${members.length === 0 ? 'Team information not available.' : members.map(m =>
-    `- **${m.name}** — ${m.position}${m.teamCategory ? ' [' + (Array.isArray(m.teamCategory) ? m.teamCategory.join(', ') : m.teamCategory) + ']' : ''}${m.description ? ': ' + m.description.slice(0, 120) : ''}`
-).join('\n')}
+PRODUCTIONS:
+${productionText || 'Not available.'}
 
-## Open Auditions (${auditions.length})
-${auditions.length === 0 ? 'No open auditions at the moment. Check back or contact us!' : auditions.map(a =>
-    `- **${a.title}**${a.applicationDeadline ? ' (Deadline: ' + new Date(a.applicationDeadline).toDateString() + ')' : ''}: ${a.description?.slice(0, 150) || ''}${a.requirements ? '\n  Requirements: ' + a.requirements.slice(0, 100) : ''}`
-).join('\n')}
+UPCOMING EVENTS:
+${eventText}
 
-## Upcoming Projects (${upcoming.length})
-${upcoming.length === 0 ? 'No upcoming projects listed.' : upcoming.map(p =>
-    `- **${p.title}**${p.status ? ' [' + p.status + ']' : ''}${p.expectedDate ? ' — Expected: ' + new Date(p.expectedDate).toDateString() : ''}${p.description ? ': ' + p.description.slice(0, 100) : ''}`
-).join('\n')}
+AUDITIONS:
+${auditionText}
 
-## How to Contact / Get Involved
-- **Contact form**: Visit the "Contact Us" page on the website
-- **Join the choir**: Apply through the Auditions section
-- **Book SJCU**: Use the Contact Us form for bookings and enquiries
-- **Email**: ${settings?.email || 'johnscarol2018@gmail.com'}
-`.trim();
+UPCOMING PROJECTS:
+${upcomingText}
+
+CONTACT: Email — johnsc@example.com | Website: stjohnscarolunion.com`;
 }
 
 export const chat = async (req, res) => {
+  try {
     const { messages } = req.body;
-
     if (!Array.isArray(messages) || messages.length === 0) {
-        return res.status(400).json({ success: false, message: 'Messages array is required' });
+      return sendError(res, 'messages array is required', 400);
     }
 
-    // Validate message format
-    const validMessages = messages.filter(m =>
-        m && typeof m.role === 'string' && typeof m.content === 'string' &&
-        (m.role === 'user' || m.role === 'assistant')
-    ).slice(-10); // keep last 10 turns to manage token usage
+    const groq = await getGroq();
+    if (!groq) return sendError(res, 'AI service not configured', 503);
 
-    if (validMessages.length === 0) {
-        return res.status(400).json({ success: false, message: 'Invalid message format' });
-    }
+    const systemPrompt = await buildContext();
 
-    try {
-        const context = await buildContext();
+    const completion = await groq.chat.completions.create({
+      model: 'llama-3.1-8b-instant',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...messages.slice(-10), // last 10 turns only
+      ],
+      max_tokens: 512,
+      temperature: 0.7,
+    });
 
-        const systemPrompt = `You are the official AI assistant for St. John's Carol Union (SJCU), a Christian choir and music ministry. You are friendly, warm, and helpful — reflecting the spirit of the ministry.
-
-Use ONLY the information provided below to answer questions. If something isn't covered in the data, say you don't have that specific information and suggest they contact the team directly via the website's Contact Us form or email.
-
-Keep responses concise (2–4 sentences max unless listing items). Use a warm, welcoming tone. You can use emojis sparingly. Always respond in the same language the user writes in.
-
-Do NOT make up events, members, productions, or details not in the data below.
-
---- CURRENT SJCU WEBSITE DATA ---
-${context}
---- END OF DATA ---
-
-Today's date: ${new Date().toDateString()}`;
-
-        const response = await client.chat.completions.create({
-            model: 'llama-3.3-70b-versatile',
-            max_tokens: 400,
-            messages: [
-                { role: 'system', content: systemPrompt },
-                ...validMessages,
-            ],
-        });
-
-        const reply = response.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response. Please try again!";
-
-        res.json({ success: true, reply });
-
-    } catch (err) {
-        console.error('Chat AI error:', err.message);
-        res.status(500).json({
-            success: false,
-            message: 'AI service temporarily unavailable. Please try again shortly.',
-        });
-    }
+    const reply = completion.choices[0]?.message?.content?.trim() || "Sorry, I couldn't generate a response right now.";
+    sendSuccess(res, { reply });
+  } catch (err) {
+    console.error('❌ Chat error:', err?.message);
+    sendError(res, 'AI service error: ' + (err?.message || 'unknown'), 500);
+  }
 };

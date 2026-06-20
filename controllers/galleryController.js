@@ -27,13 +27,22 @@ export const uploadGalleryImages = async (req, res) => {
     }
 
     const count = await Gallery.countDocuments();
-    const uploadPromises = req.files.map((file, i) =>
-      uploadToCloudinary(file.buffer, 'sjcu/gallery').then((result) =>
-        Gallery.create({ type: 'image', image: result.secure_url, category, caption: caption || '', order: count + i })
-      )
-    );
+    const items = [];
 
-    const items = await Promise.all(uploadPromises);
+    // Upload in batches of 3 to avoid Cloudinary rate limits and timeouts
+    const BATCH = 3;
+    for (let i = 0; i < req.files.length; i += BATCH) {
+      const batch = req.files.slice(i, i + BATCH);
+      const results = await Promise.all(
+        batch.map((file, j) =>
+          uploadToCloudinary(file.buffer, 'sjcu/gallery').then((result) =>
+            Gallery.create({ type: 'image', image: result.secure_url, category, caption: caption || '', order: count + i + j })
+          )
+        )
+      );
+      items.push(...results);
+    }
+
     sendSuccess(res, { gallery: items }, 'Images uploaded successfully', 201);
   } catch (err) {
     sendError(res, err.message);

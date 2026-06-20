@@ -1,12 +1,15 @@
 import express from 'express';
-import { getApplication, updateApplicationStatus, deleteApplication, getRecentApplications } from '../controllers/auditionApplicationController.js';
 import { protect, adminOnly } from '../middleware/authMiddleware.js';
+import {
+  getRecentApplications, getApplication,
+  updateApplicationStatus, deleteApplication,
+} from '../controllers/auditionApplicationController.js';
 
 const router = express.Router();
 
 router.get('/recent', protect, adminOnly, getRecentApplications);
-router.get('/:appId', protect, adminOnly, getApplication);
-router.put('/:appId/status', protect, adminOnly, updateApplicationStatus);
-router.delete('/:appId', protect, adminOnly, deleteApplication);
+router.get('/:id', protect, adminOnly, getApplication);
+router.put('/:id/status', protect, adminOnly, updateApplicationStatus);
+router.delete('/:id', protect, adminOnly, deleteApplication);
 
 export default router;

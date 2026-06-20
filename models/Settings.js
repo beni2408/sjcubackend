@@ -12,6 +12,7 @@ const settingsSchema = new mongoose.Schema({
     twitter: { type: String, default: '' },
   },
   footerText: { type: String, default: '© St. John\'s Carol Union. All rights reserved.' },
+  galleryShuffled: { type: Boolean, default: false },
 }, { timestamps: true });
 
 export default mongoose.model('Settings', settingsSchema);

@@ -1,27 +1,33 @@
 import mongoose from 'mongoose';
 
 const auditionSchema = new mongoose.Schema({
-  auditionId: { type: String, unique: true, index: true },
-  title: { type: String, required: true, trim: true },
-  featureImage: { type: String, default: '' },
-  description: { type: String, trim: true, default: '' },
-  date: { type: Date, required: true },
-  venue: { type: String, required: true, trim: true },
-  applicationStart: { type: Date, required: true },
-  applicationEnd: { type: Date, required: true },
-  minAge: { type: Number, default: 0 },
-  maxAge: { type: Number, default: 100 },
-  status: { type: String, enum: ['active', 'closed'], default: 'active' },
-  order: { type: Number, default: 0 },
-}, { timestamps: true });
+  auditionId:       { type: String, unique: true },
+  title:            { type: String, required: true, trim: true },
+  description:      { type: String, trim: true, default: '' },
+  date:             { type: Date, required: true },
+  venue:            { type: String, trim: true, default: '' },
+  applicationStart: { type: Date },
+  applicationEnd:   { type: Date },
+  minAge:           { type: Number, default: 5 },
+  maxAge:           { type: Number, default: 60 },
+  featureImage:     { type: String, default: '' },
+  order:            { type: Number, default: 0 },
+}, { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
-// Auto-generate a human-readable Audition ID on creation, e.g. SJCU-AUD-2026-001
+// Dynamically computed — never stale
+auditionSchema.virtual('isOpen').get(function () {
+  if (!this.applicationEnd) return true;
+  return new Date() <= new Date(this.applicationEnd);
+});
+
+auditionSchema.virtual('status').get(function () {
+  return this.isOpen ? 'Open' : 'Closed';
+});
+
 auditionSchema.pre('save', async function (next) {
-  if (this.isNew && !this.auditionId) {
-    const year = new Date().getFullYear();
-    const prefix = `SJCU-AUD-${year}-`;
-    const count = await this.constructor.countDocuments({ auditionId: new RegExp(`^${prefix}`) });
-    this.auditionId = `${prefix}${String(count + 1).padStart(3, '0')}`;
+  if (!this.auditionId) {
+    const count = await mongoose.model('Audition').countDocuments();
+    this.auditionId = `SJCU-AUD-${new Date().getFullYear()}-${String(count + 1).padStart(3, '0')}`;
   }
   next();
 });

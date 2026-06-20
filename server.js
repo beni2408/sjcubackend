@@ -17,11 +17,10 @@ import settingsRoutes from './routes/settingsRoutes.js';
 import upcomingProjectRoutes from './routes/upcomingProjectRoutes.js';
 import partnerRoutes from './routes/partnerRoutes.js';
 import memorableEventRoutes from './routes/memorableEventRoutes.js';
-import contactRoutes from './routes/contactRoutes.js';
+import apiKeysRoutes from './routes/apiKeysRoutes.js';
 import auditionRoutes from './routes/auditionRoutes.js';
 import auditionApplicationRoutes from './routes/auditionApplicationRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
-import apiKeysRoutes from './routes/apiKeysRoutes.js';
 import { errorHandler, notFound } from './middleware/errorMiddleware.js';
 
 dotenv.config();
@@ -77,17 +76,18 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/upcoming', upcomingProjectRoutes);
 app.use('/api/partners', partnerRoutes);
 app.use('/api/memorable-events', memorableEventRoutes);
-app.use('/api/contacts', contactRoutes);
+app.use('/api/keys', apiKeysRoutes);
 app.use('/api/auditions', auditionRoutes);
 app.use('/api/audition-applications', auditionApplicationRoutes);
 app.use('/api/chat', chatRoutes);
-app.use('/api/keys', apiKeysRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`✅ SJCU Server running on http://localhost:${PORT}`);
 });
+// Give gallery batch uploads enough time (2 minutes)
+server.timeout = 120000;
 
 export default app;

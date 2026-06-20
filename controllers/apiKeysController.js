@@ -1,76 +1,78 @@
-import ApiKeys from '../models/ApiKeys.js';
-import { encrypt, decrypt, mask } from '../services/cryptoService.js';
+import ApiKey from '../models/ApiKeys.js';
+import { encrypt, decrypt } from '../services/cryptoService.js';
 import { sendSuccess, sendError } from '../utils/apiResponse.js';
 
-const FIELDS = [
-    'cloudinaryCloudName',
-    'cloudinaryApiKey',
-    'cloudinaryApiSecret',
-    'emailUser',
-    'emailPassword',
-    'youtubeApiKey',
-    'groqApiKey',
+const ALLOWED_KEYS = [
+  'cloudinaryCloudName', 'cloudinaryApiKey', 'cloudinaryApiSecret',
+  'emailUser', 'emailPassword',
+  'youtubeApiKey',
+  'groqApiKey',
+  'resendApiKey',
 ];
 
-// GET /api/keys — returns masked previews + isSet flag (never exposes raw values)
+function maskValue(val) {
+  if (!val || val.length < 6) return '••••••';
+  return val.slice(0, 4) + '••••' + val.slice(-2);
+}
+
+// GET /api/keys — returns masked status for each key
 export const getKeys = async (req, res) => {
-    try {
-        const doc = await ApiKeys.findOne().lean();
-        const result = {};
-        for (const field of FIELDS) {
-            const decrypted = doc ? decrypt(doc[field] || '') : '';
-            result[field] = {
-                isSet:   !!decrypted,
-                preview: decrypted ? mask(decrypted) : '',
-                updatedAt: doc?.updatedAt || null,
-            };
-        }
-        res.json({ success: true, data: { keys: result, updatedBy: doc?.updatedBy || null } });
-    } catch (err) {
-        console.error('getKeys error:', err.message);
-        sendError(res, 'Failed to load API keys', 500);
+  try {
+    const docs = await ApiKey.find({ key: { $in: ALLOWED_KEYS } });
+    const keys = {};
+    for (const name of ALLOWED_KEYS) {
+      const doc = docs.find(d => d.key === name);
+      if (doc) {
+        const plain = decrypt(doc);
+        keys[name] = { isSet: true, preview: maskValue(plain) };
+      } else {
+        keys[name] = { isSet: false, preview: '' };
+      }
     }
+    sendSuccess(res, { keys });
+  } catch (err) {
+    sendError(res, err.message);
+  }
 };
 
-// PUT /api/keys — encrypts and saves only non-empty submitted fields
+// PUT /api/keys — upsert one or more keys
 export const updateKeys = async (req, res) => {
-    try {
-        const updates = {};
-        for (const field of FIELDS) {
-            const val = req.body[field];
-            // Only update if a real new value was submitted (not empty, not a masked string)
-            if (val && typeof val === 'string' && !val.includes('•')) {
-                updates[field] = encrypt(val.trim());
-            }
-        }
-
-        if (Object.keys(updates).length === 0) {
-            return sendError(res, 'No new values provided', 400);
-        }
-
-        updates.updatedBy = req.user._id;
-
-        const doc = await ApiKeys.findOneAndUpdate(
-            {},
-            { $set: updates },
-            { upsert: true, new: true }
-        );
-
-        // Return updated masked previews
-        const result = {};
-        for (const field of FIELDS) {
-            const decrypted = decrypt(doc[field] || '');
-            result[field] = {
-                isSet:   !!decrypted,
-                preview: decrypted ? mask(decrypted) : '',
-            };
-        }
-
-        console.log(`[API KEYS] Updated by ${req.user.email} — fields: ${Object.keys(updates).filter(k => k !== 'updatedBy').join(', ')}`);
-
-        res.json({ success: true, message: 'API keys updated securely', data: { keys: result } });
-    } catch (err) {
-        console.error('updateKeys error:', err.message);
-        sendError(res, 'Failed to update API keys', 500);
+  try {
+    const updates = req.body;
+    for (const [name, value] of Object.entries(updates)) {
+      if (!ALLOWED_KEYS.includes(name) || typeof value !== 'string' || !value.trim()) continue;
+      const encrypted = encrypt(value.trim());
+      await ApiKey.findOneAndUpdate(
+        { key: name },
+        { key: name, ...encrypted },
+        { upsert: true, new: true }
+      );
     }
+    // Return fresh status
+    const docs = await ApiKey.find({ key: { $in: ALLOWED_KEYS } });
+    const keys = {};
+    for (const name of ALLOWED_KEYS) {
+      const doc = docs.find(d => d.key === name);
+      if (doc) {
+        const plain = decrypt(doc);
+        keys[name] = { isSet: true, preview: maskValue(plain) };
+      } else {
+        keys[name] = { isSet: false, preview: '' };
+      }
+    }
+    sendSuccess(res, { keys }, 'Keys saved securely');
+  } catch (err) {
+    sendError(res, err.message);
+  }
+};
+
+// Internal helper — used by other services to get a decrypted key value
+export const getDecryptedKey = async (name) => {
+  try {
+    const doc = await ApiKey.findOne({ key: name });
+    if (!doc) return null;
+    return decrypt(doc);
+  } catch {
+    return null;
+  }
 };
