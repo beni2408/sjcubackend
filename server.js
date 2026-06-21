@@ -63,6 +63,8 @@ app.use('/api', limiter);
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
+app.get('/health', (req, res) => res.status(200).send('ok'));
+
 app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'SJCU API is running', timestamp: new Date().toISOString() });
 });
