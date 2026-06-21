@@ -36,6 +36,8 @@ const allowedOrigins = [
   'https://sjcufrontend.vercel.app',
   'https://stjohnscarolunion.netlify.app',
   'https://sjcunew.netlify.app',
+  'https://stjohnscarolunion.com',
+  'https://www.stjohnscarolunion.com',
   ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL.replace(/\/$/, '')] : []),
 ];
 app.use(cors({
