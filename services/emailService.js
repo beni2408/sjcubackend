@@ -12,7 +12,7 @@ const FROM = 'St. John\'s Carol Union <noreply@stjohnscarolunion.com>';
 
 const EMAIL_HEADER = `
   <div style="text-align:center;padding:28px 0 20px;border-bottom:1px solid #1e1b4b;">
-    <img src="https://stjohnscarolunion.com/logo.png" alt="St. John's Carol Union" width="64" height="64"
+    <img src="https://sjcunew2.netlify.app/logo.png" alt="St. John's Carol Union" width="64" height="64"
       style="border-radius:50%;border:2px solid #7c3aed;object-fit:contain;background:#fff;" />
     <p style="margin:10px 0 0;color:#a78bfa;font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">
       St. John's Carol Union
